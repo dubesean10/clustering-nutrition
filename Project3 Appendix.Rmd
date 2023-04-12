@@ -1,0 +1,127 @@
+---
+title: "Is it possible to predict food groups from micro/macro nutrients?"
+author: "Sean Dube"
+date: "2023-03-28"
+output: pdf_document
+---
+
+## Load in Data and Libraries
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(ggcorrplot)
+library(factoextra)
+library(cluster)
+library(tidyverse)
+library(GGally)
+
+nutrition <- read.csv("/Users/seandube/Desktop/ST ANDREWS 2022-2023/ Courses Semester 2/MT5758 - Multivariate Analysis/Projects/Project 3/nutrition.csv")
+```
+
+## Clean Data 
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+#remove irrelevant columns
+nutrition2 <- nutrition %>% 
+  select(-c(ID, CommonName, MfgName, ScientificName))
+#create separate data set with just numerical attributes
+nutrition_numerical <- nutrition2 %>% 
+  select(-c(FoodGroup, ShortDescrip, Descrip))
+#nutrition with ID
+nutrition_ID <- nutrition %>% 
+  select(-c(FoodGroup, Descrip, ShortDescrip, CommonName, MfgName, ScientificName))
+```
+
+## Explore Data
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+#check correlations 
+ggcorr(nutrition_numerical)
+```
+
+## Prepare Data
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+# set row names
+rownames(nutrition_ID) <- nutrition_ID[,1]
+#check variable range
+apply(nutrition, 2, range) #massive variability in attributes must scale for PCA
+#remove NAs
+nutrition_ID <- na.omit(nutrition_ID)
+#scale
+nutrition_ID <- as.data.frame(scale(nutrition_ID[,-1], center = TRUE))
+head(nutrition_ID) #check if scaling worked
+
+```
+
+## Reduce Dimensionality
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+#pca
+nutrition_ID_PCA <- prcomp(nutrition_ID)
+#scree plot
+screeplot(nutrition_ID_PCA, type = "l", main = "Scree Plot") # look for the elbow or break point. Point where  the plot changes from steep to flat. starts to level off at 5 components
+
+#cumulative proportion of variance explained
+plot(cumsum(nutrition_ID_PCA$sdev^2)/sum(nutrition_ID_PCA$sdev^2)) # to keep between 60-80% of the variability we must retain at least 5 PCA's
+
+nutrition_ID_PCA_final <- prcomp(nutrition_ID, n.comp = 5)
+scores <- nutrition_ID_PCA_final$x[, 1:5]
+factoextra::fviz_pca_var(nutrition_ID_PCA_final)
+
+#keep only the first 5 principal components
+
+reduced_nutrition <- as.data.frame(nutrition_ID_PCA_final$x[,1:9])
+
+```
+
+## K-Means Clustering
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+#determine the optimal number of clusters in the dataset using within-cluster sums squares as criterion
+
+wss <- numeric(15)
+for(i in 1:15) {
+  wss[i] <- sum(kmeans(reduced_nutrition, centers = i)$withinss)
+}
+plot(1:15, wss, type= "b", xlab = "Number of Clusters", ylab = "Within-cluster sum of squares") # the ideal number of clusters appears to be between 7 and 9
+
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+#Perform cluster analysis
+clusters <- kmeans(reduced_nutrition, centers = 7)
+clusters2 <- kmeans(reduced_nutrition, centers = 9)
+clusters3 <- kmeans(reduced_nutrition, centers = 11)
+
+#view cluster assignments 
+clusters$cluster
+clusters2$cluster
+clusters3$cluster
+
+#visualize clusters
+fviz_cluster(clusters, data = reduced_nutrition)
+fviz_cluster(clusters2, data = reduced_nutrition)
+fviz_cluster(clusters3, data = reduced_nutrition)
+
+```
+
+## Hierachical Clustering
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+#determine distance metric and linkage method
+
+distance_metric <- "euclidean"
+linkage_method <- "ward.D2"
+
+#perform hierarchical cluster analysis
+
+dist_matrix <- dist(reduced_nutrition, method = distance_metric)
+hc <- hclust(dist_matrix, method = linkage_method)
+
+#view dendrogram
+
+plot(hc) 
+
+```
+
+
+
